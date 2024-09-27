@@ -72,7 +72,7 @@ class Playlist:
 
 
 class MusicApp:
-    def __init__(self, data_file='music_data.json', csv_file='charts_renew.csv'):
+    def __init__(self, data_file='music_data.json', csv_file='charts_renew_large.csv'):
         self.data_file = data_file
         self.csv_file = csv_file
         self.songs = []
@@ -105,34 +105,43 @@ class MusicApp:
                 df = pd.read_csv(self.csv_file)
                 for _, row in df.iterrows():
                     song = Song(row['name'], row['artist'], row['album'], row['genre'], row['duration'])
-                    if song not in self.songs:
-                        self.songs.append(song)
+                    self.songs.append(song)
                 print(f"Loaded {len(df)} songs from {self.csv_file}.")
             except Exception as e:
                 print(f"Failed to load songs from CSV: {e}")
         else:
             print(f"CSV file {self.csv_file} not found.")
 
+    def measure_sorting_time(self, sort_function, iterations=1):
+        total_time = 0
+        for _ in range(iterations):
+            songs_copy = self.songs[:]  # Kopie der Songs, um die Originalliste zu behalten
+            start_time = time.perf_counter()
+            sort_function(songs_copy)
+            end_time = time.perf_counter()
+            total_time += end_time - start_time
+        return total_time / iterations
+
+    def measure_search_time(self, search_function, search_term):
+        start_time = time.perf_counter()
+        results = search_function(search_term)
+        end_time = time.perf_counter()
+        elapsed_time = end_time - start_time
+        return results, elapsed_time
+
     # Sortieralgorithmen
-    def bubblesort_songs(self):
-        for i in range(len(self.songs)):
-            for j in range(0, len(self.songs) - i - 1):
-                if self.songs[j] > self.songs[j + 1]:
-                    self.songs[j], self.songs[j + 1] = self.songs[j + 1], self.songs[j]
-        print("Songs sorted using Bubblesort.")
-        self.display_all_songs()
+    def bubblesort(self, songs):
+        for i in range(len(songs)):
+            for j in range(0, len(songs) - i - 1):
+                if songs[j] > songs[j + 1]:
+                    songs[j], songs[j + 1] = songs[j + 1], songs[j]
 
-    def mergesort_songs(self):
-        self.songs = self._mergesort(self.songs)
-        print("Songs sorted using Mergesort.")
-        self.display_all_songs()
-
-    def _mergesort(self, songs):
+    def mergesort(self, songs):
         if len(songs) <= 1:
             return songs
         mid = len(songs) // 2
-        left = self._mergesort(songs[:mid])
-        right = self._mergesort(songs[mid:])
+        left = self.mergesort(songs[:mid])
+        right = self.mergesort(songs[mid:])
         return self._merge(left, right)
 
     def _merge(self, left, right):
@@ -145,36 +154,48 @@ class MusicApp:
         sorted_list.extend(left or right)
         return sorted_list
 
-    def blocksort_songs(self):
-        n = len(self.songs)
+    def blocksort(self, songs):
+        n = len(songs)
         block_size = int(math.sqrt(n))
         for i in range(0, n, block_size):
-            self.songs[i:i + block_size] = sorted(self.songs[i:i + block_size])
-        print("Songs sorted using Blocksort.")
-        self.display_all_songs()
+            songs[i:i + block_size] = sorted(songs[i:i + block_size])
 
-    def quicksort_songs(self):
-        self.songs = self._quicksort(self.songs)
-        print("Songs sorted using Quicksort.")
-        self.display_all_songs()
-
-    def _quicksort(self, songs):
+    def quicksort(self, songs):
         if len(songs) <= 1:
             return songs
         pivot = songs[len(songs) // 2]
         left = [x for x in songs if x < pivot]
         middle = [x for x in songs if x == pivot]
         right = [x for x in songs if x > pivot]
-        return self._quicksort(left) + middle + self._quicksort(right)
+        return self.quicksort(left) + middle + self.quicksort(right)
+
+    def run_sorting_tests(self):
+        print("\n--- Sorting Algorithm Performance Test ---")
+        print(f"Dataset: {len(self.songs)} Songs")
+
+        # Messen der Laufzeit für jeden Algorithmus
+        quicksort_time = self.measure_sorting_time(self.quicksort)
+        print(f"Quicksort: {quicksort_time:.4f} seconds")
+
+        bubblesort_time = self.measure_sorting_time(self.bubblesort)
+        print(f"Bubblesort: {bubblesort_time:.4f} seconds")
+
+        mergesort_time = self.measure_sorting_time(self.mergesort)
+        print(f"Mergesort: {mergesort_time:.4f} seconds")
+
+        blocksort_time = self.measure_sorting_time(self.blocksort)
+        print(f"Blocksort: {blocksort_time:.4f} seconds")
 
     # Suchalgorithmen
     def linear_search(self, search_term):
         return [song for song in self.songs if search_term.lower() in song.name.lower() or search_term.lower() in song.artist.lower()]
 
-    def binary_search(self, search_term):
-        self.songs = self._quicksort(self.songs)
+    def binary_search_iterative(self, search_term):
+        # Iterative Implementierung der Binärsuche
+        self.songs = self.quicksort(self.songs)
         low, high = 0, len(self.songs) - 1
         results = []
+
         while low <= high:
             mid = (low + high) // 2
             if search_term.lower() == self.songs[mid].name.lower() or search_term.lower() == self.songs[mid].artist.lower():
@@ -184,36 +205,30 @@ class MusicApp:
                 high = mid - 1
             else:
                 low = mid + 1
+
         return results
 
     def search_songs_advanced(self):
         search_term = input("Enter song name or artist to search: ")
         print("1. Linear Search")
-        print("2. Binary Search")
+        print("2. Binary Search (Iterative)")
         choice = input("Choose search algorithm: ")
 
         if choice == '1':
-            results = self.linear_search(search_term)
+            results, search_time = self.measure_search_time(self.linear_search, search_term)
         elif choice == '2':
-            results = self.binary_search(search_term)
+            results, search_time = self.measure_search_time(self.binary_search_iterative, search_term)
         else:
             print("Invalid choice. Returning to main menu.")
             return
 
+        print(f"Search completed in {search_time:.4f} seconds.")
         if results:
             print("Search Results:")
             for song in results:
                 print(song)
         else:
             print("No songs found.")
-
-    def display_all_songs(self):
-        if not self.songs:
-            print("No songs available.")
-        else:
-            print("\n--- All Songs ---")
-            for song in self.songs:
-                print(song)
 
     def main_menu(self):
         while True:
@@ -222,8 +237,8 @@ class MusicApp:
             print("2. Create Playlist")
             print("3. Add Song to Playlist")
             print("4. Search Songs")
-            print("5. Advanced Search")
-            print("6. Sort Songs")
+            print("5. Advanced Search with Time Measurement")
+            print("6. Sort Songs with Time Measurement")
             print("7. Display All Songs")
             print("8. Display Playlists")
             print("9. Exit")
@@ -241,7 +256,7 @@ class MusicApp:
             elif choice == '5':
                 self.search_songs_advanced()
             elif choice == '6':
-                self.quicksort_songs()
+                self.run_sorting_tests()
             elif choice == '7':
                 self.display_all_songs()
             elif choice == '8':
